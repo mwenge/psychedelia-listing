@@ -1,5 +1,6 @@
 # Psychedelia (Demo) by Jeff Minter
 <img height=460 src="https://github.com/mwenge/psychedelia-listing/raw/master/listing/PopularComputing_Weekly_Issue_1984-12-13_0031.jpg"><img height=460 src="https://github.com/mwenge/psychedelia-listing/raw/master/listing/PopularComputing_Weekly_Issue_1984-12-13_0033.jpg">
+
 This appeared as a type-in listing in 'Popular Computing Magazine' in December 1984.
 
 # Try it online
