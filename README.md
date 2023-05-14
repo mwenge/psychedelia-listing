@@ -4,7 +4,7 @@
 This appeared as a type-in listing in 'Popular Computing Magazine' in December 1984.
 
 # Try it online
-You can [play it without installing anything here.](https://lvllvl.com/c64/?gid=d8012ae560e19682bd8a38ed4c0b1961)
+You can [play it without installing anything here.](https://lvllvl.com/c64/?gid=59db254ccc74c65007c58a890ccf31af)
 
 ## Setup
 On Ubuntu you can install [VICE] as follows:
