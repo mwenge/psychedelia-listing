@@ -25,4 +25,4 @@ To just compile the game and get a binary (`psychedelia.prg`) do:
 $ make psychedelia.prg
 ```
 
-* [VICE][vice] - The most popular C64 emulator
+[vice]: http://vice-emu.sourceforge.net/
