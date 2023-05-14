@@ -3,6 +3,8 @@
 
 This appeared as a type-in listing in 'Popular Computing Magazine' in December 1984.
 
+For more about Jeff Minter's Psychedelia, see the [main repository](https://github.com/mwenge/psychedelia).
+
 # Try it online
 You can [play it without installing anything here.](https://lvllvl.com/c64/?gid=59db254ccc74c65007c58a890ccf31af)
 
