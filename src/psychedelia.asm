@@ -35,8 +35,6 @@ RAM4000HiPtr                = $FC
 RAM4000LoPtr                = $FB
 colorRAMLineTableLoPtrArray = $0340
 colorRAMLineTableHiPtrArray = $0360
-pixelYPosition14            = $0314
-pixelYPosition15            = $0315
 SCREEN_RAM                  = $0400
 COLOR_RAM                   = $D800
 RETURN_FROM_INTERRUPT       = $EA31
@@ -423,7 +421,7 @@ LaunchPsychedelia
 MainPaintLoop   
         INC currentIndexToPixelBuffers
         LDA currentIndexToPixelBuffers
-        AND a4435
+        AND maskForFireOffset
         STA currentIndexToPixelBuffers
         TAX 
         DEC framesRemainingToNextPaintForStep,X
@@ -455,9 +453,9 @@ currentIndexToPixelBuffers   .BYTE $08
 SetUpIntteruptHandlers   
         SEI 
         LDA #<MainInterruptHandler
-        STA pixelYPosition14    ;IRQ
+        STA $0314    ;IRQ
         LDA #>MainInterruptHandler
-        STA pixelYPosition15    ;IRQ
+        STA $0315    ;IRQ
 
         LDA #$0A
         STA cursorXPosition
@@ -469,8 +467,8 @@ SetUpIntteruptHandlers
         CLI 
         RTS 
 
-countStepsBeforeCheckingJoystickInput   .BYTE $01
-a434A   .BYTE $00
+countStepsBeforeCheckingJoystickInput .BYTE $01
+lastColorPainted                      .BYTE $00
 
 ;-------------------------------------------------------
 ; MainInterruptHandler
@@ -569,25 +567,27 @@ CheckIfPlayerPressedFire
 
         ; Player has pressed fire.
         LDA #$00
-        STA a4436
+        STA stepsSincePressedFire
         JMP DrawCursorAndReturnFromInterrupt
 
 PlayerHasntPressedFire   
-        LDA a4437
+        LDA stepsExceeded255
         BEQ b43D7
-        LDA a4436
+        LDA stepsSincePressedFire
         BNE DrawCursorAndReturnFromInterrupt
-        INC a4436
-b43D7   SBC a4434
-        LDA a4434
-        AND a4435
-        STA a4434
+
+        INC stepsSincePressedFire
+b43D7   SBC offsetSincePressedFire
+        LDA offsetSincePressedFire
+        AND maskForFireOffset
+        STA offsetSincePressedFire
 
 UpdateBaseLevelArray   
         TAX 
         LDA baseLevelArray,X
         CMP #$FF
         BNE DrawCursorAndReturnFromInterrupt
+
         LDA cursorXPosition
         STA pixelXPositionArray,X
         LDA cursorYPosition
@@ -603,7 +603,7 @@ DrawCursorAndReturnFromInterrupt
         JSR LoadXAndYOfCursorPosition
         LDA (currentLineInColorRamLoPtr),Y
         AND #$07
-        STA a434A
+        STA lastColorPainted
         LDA #$01
         STA currentColorToPaint
         JSR PaintCursorAtCurrentPosition
@@ -630,13 +630,13 @@ PaintCursorAtCurrentPosition
         STA (currentLineInColorRamLoPtr),Y
         RTS 
 
-cursorXPosition .BYTE $1E
-cursorYPosition .BYTE $0D
-a4434           .BYTE $1A
-a4435           .BYTE $1F
-a4436           .BYTE $00
-a4437           .BYTE $00
-smoothingDelay  .BYTE $0C
+cursorXPosition        .BYTE $1E
+cursorYPosition        .BYTE $0D
+offsetSincePressedFire .BYTE $1A
+maskForFireOffset      .BYTE $1F
+stepsSincePressedFire  .BYTE $00
+stepsExceeded255       .BYTE $00
+smoothingDelay         .BYTE $0C
 
         .BYTE $00,$00,$00,$00,$00,$00,$00
         .BYTE $5B,$00,$00,$00,$00,$00,$00,$00
@@ -663,15 +663,15 @@ smoothingDelay  .BYTE $0C
         .BYTE $00,$00,$00,$00,$00,$00,$00,$00
         .BYTE $00,$00,$00,$00,$00,$00,$00,$00
         .BYTE $00,$00,$00,$00,$00,$00,$00
+.enc "petscii"  ;define an ascii->petscii encoding
+        .cdef "..", $2E  ;characters
+        .cdef "  ", $20  ;characters
+        .cdef "AZ", $01
 ; The listing for this part is cut off so some
 ; of the text has to be restored.
 bannerText   
-        .BYTE $00,$10,$13,$19,$03,$08,$05,$04
-        .BYTE $05,$0C,$09,$01,$2E,$2E,$2E,$01
-        .BYTE $20,$06,$0F,$12,$05,$14,$01,$13
-        .BYTE $14,$05,$20,$02,$19,$20,$0A,$05
-        .BYTE $06,$06,$20,$0D,$09,$0E,$14,$05
-        .BYTE $12
+        .TEXT $00,"PSYCHEDELIA...A FORETASTE BY JEFF MINTER"
+.enc "none"
 
 ;-------------------------------------------------------
 ; InitializeScreenAndText
