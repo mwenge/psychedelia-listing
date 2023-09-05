@@ -19,13 +19,13 @@
 
 pixelXPosition              = $02
 pixelYPosition              = $03
-baseLevelForCurrentPixel    = $04
-currentLineInColorRamLoPtr2 = $05
-currentLineInColorRamHiPtr2 = $06
-previousCursorXPositionZP   = $08
-previousPixelYPositionZP    = $09
-currentLineInColorRamLoPtr  = $0A
-currentLineInColorRamHiPtr  = $0B
+colorIndexForCurrentPixel    = $04
+currentLineForPixelInColorRamLoPtr = $05
+currentLineForPixelInColorRamHiPtr = $06
+initialPixelXPosition   = $08
+initialPixelYPosition    = $09
+currentLineForCursorInColorRamLoPtr  = $0A
+currentLineForCursorInColorRamHiPtr  = $0B
 currentColorToPaint         = $0C
 colorRamLoPtr               = $FB
 colorRamHiPtr               = $FC
@@ -77,6 +77,8 @@ b3FEF   LDA (RAM0835LoPtr),Y
         BNE b3FEF
         JMP InitializeProgram
 
+NUM_COLS = $28
+NUM_ROWS = $18
 ;-------------------------------------------------------
 ; InitializeProgram
 ;-------------------------------------------------------
@@ -93,7 +95,7 @@ InitializeProgram
         ; Populate a table of hi/lo ptrs to the color RAM
         ; of each line on the screen (e.g. $D800,
         ; $D828, $D850 etc). Each entry represents a single
-        ; line 40 bytes long and there are nineteen lines.
+        ; line 40 bytes long and there are twenty five lines.
         ; The last line is reserved for configuration messages.
         LDX #$00
 b4012   LDA colorRamHiPtr
@@ -101,13 +103,13 @@ b4012   LDA colorRamHiPtr
         LDA colorRamLoPtr
         STA colorRAMLineTableLoPtrArray,X
         CLC 
-        ADC #$28
+        ADC #NUM_COLS
         STA colorRamLoPtr
         LDA colorRamHiPtr
         ADC #$00
         STA colorRamHiPtr
         INX 
-        CPX #$19
+        CPX #NUM_ROWS+1
         BNE b4012
 
         JSR InitializeScreenAndText
@@ -132,61 +134,75 @@ b4034   LDA #$CF
         BNE b4034
         RTS 
 
-presetColorValuesArray   .BYTE $00,$06,$02,$04,$05,$03,$07,$01
+BLACK                = $00
+WHITE                = $01
+RED                  = $02
+CYAN                 = $03
+PURPLE               = $04
+GREEN                = $05
+BLUE                 = $06
+YELLOW               = $07
+
+presetColorValuesArray  .BYTE BLACK,BLUE,RED,PURPLE,GREEN,CYAN,YELLOW,WHITE
 ;-------------------------------------------------------
 ; LoadXAndYPosition
 ;-------------------------------------------------------
 LoadXAndYPosition   
         LDX pixelYPosition
         LDA colorRAMLineTableLoPtrArray,X
-        STA currentLineInColorRamLoPtr2
+        STA currentLineForPixelInColorRamLoPtr
         LDA colorRAMLineTableHiPtrArray,X
-        STA currentLineInColorRamHiPtr2
+        STA currentLineForPixelInColorRamHiPtr
         LDY pixelXPosition
-b406A   RTS 
+ReturnEarly
+        RTS 
 
-tempIndex = $FD
+COLOR_MAX = $07
+currentColorValueOfPixel = $FD
 ;-------------------------------------------------------
 ; PaintPixel
 ;-------------------------------------------------------
 PaintPixel   
         LDA pixelXPosition
-        AND #$80
-        BNE b406A
+        AND #$80 ; Detect if has moved off left of screen
+        BNE ReturnEarly
         LDA pixelXPosition
-        CMP #$28
-        BPL b406A
+        CMP #NUM_COLS
+        BPL ReturnEarly
         LDA pixelYPosition
-        AND #$80
-        BNE b406A
+        AND #$80 ; Detect if has moved off top of screen.
+        BNE ReturnEarly
         LDA pixelYPosition
-        CMP #$18
-        BPL b406A
+        CMP #NUM_ROWS
+        BPL ReturnEarly
 
         JSR LoadXAndYPosition
-        LDA (currentLineInColorRamLoPtr2),Y
-        AND #$07
+        ; Y now contains the pixelXPosition
+        LDA (currentLineForPixelInColorRamLoPtr),Y
+        ; Make sure the color we get is addressable by
+        ; presetColorValuesArray.
+        AND #COLOR_MAX
 
         LDX #$00
 b408C   CMP presetColorValuesArray,X
         BEQ b4096
         INX 
-        CPX #$08
+        CPX #COLOR_MAX + 1
         BNE b408C
 
 b4096   TXA 
-        STA tempIndex
-        LDX baseLevelForCurrentPixel
+        STA currentColorValueOfPixel
+        LDX colorIndexForCurrentPixel
         INX 
-        CPX tempIndex
+        CPX currentColorValueOfPixel
         BEQ ActuallyPaintPixel
         BPL ActuallyPaintPixel
         RTS 
 
 ActuallyPaintPixel   
-        LDX baseLevelForCurrentPixel
+        LDX colorIndexForCurrentPixel
         LDA presetColorValuesArray,X
-        STA (currentLineInColorRamLoPtr2),Y
+        STA (currentLineForPixelInColorRamLoPtr),Y
         RTS 
 
 ;-------------------------------------------------------
@@ -195,7 +211,7 @@ ActuallyPaintPixel
 LoopThroughPixelsAndPaint   
         JSR PaintPixelForCurrentSymmetry
         LDY #$00
-        LDA baseLevelForCurrentPixel
+        LDA colorIndexForCurrentPixel
         CMP #$07
         BNE CanLoopAndPaint
         RTS 
@@ -205,46 +221,56 @@ CanLoopAndPaint
         STA countToMatchCurrentIndex
        
         LDA pixelXPosition
-        STA previousCursorXPositionZP
+        STA initialPixelXPosition
         LDA pixelYPosition
-        STA previousPixelYPositionZP
+        STA initialPixelYPosition
 
+        ; Y starts out at zero here.
 PixelPaintLoop   
-        LDA previousCursorXPositionZP
+        LDA initialPixelXPosition
         CLC 
         ADC starOneXPosArray,Y
         STA pixelXPosition
-        LDA previousPixelYPositionZP
+
+        LDA initialPixelYPosition
         CLC 
         ADC starOneYPosArray,Y
         STA pixelYPosition
 
+        ; Save the Y register
         TYA 
         PHA 
 
         JSR PaintPixelForCurrentSymmetry
 
+        ; Restore the Y register
         PLA 
         TAY 
+
         INY 
 
+        ; Loop if we haven't reached the end of the current
+        ; line in starOneXPosArray
         LDA starOneXPosArray,Y
         CMP #$55
         BNE PixelPaintLoop
 
         DEC countToMatchCurrentIndex
         LDA countToMatchCurrentIndex
-        CMP baseLevelForCurrentPixel
+        CMP colorIndexForCurrentPixel
         BEQ RestorePositionsAndReturn
         CMP #$01
         BEQ RestorePositionsAndReturn
+
+        ; Move to the start of the next line in starOneXPosArray/
+        ; starOneYPosArray.
         INY 
         JMP PixelPaintLoop
 
 RestorePositionsAndReturn   
-        LDA previousCursorXPositionZP
+        LDA initialPixelXPosition
         STA pixelXPosition
-        LDA previousPixelYPositionZP
+        LDA initialPixelYPosition
         STA pixelYPosition
         RTS 
 
@@ -317,7 +343,7 @@ CleanUpAndReturnFromSymmetry
 HasSymmetry   
         ; Has a pattern to paint on the Y axis
         ; symmetry so prepare for that.
-        LDA #$28
+        LDA #NUM_COLS
         SEC 
         SBC pixelXPosition
         STA pixelXPosition
@@ -328,7 +354,7 @@ HasSymmetry
         CMP #$01
         BEQ CleanUpAndReturnFromSymmetry
 
-        LDA #$18
+        LDA #NUM_ROWS
         SEC 
         SBC pixelYPosition
         STA pixelYPosition
@@ -364,7 +390,7 @@ pixelYPositionArray
         .BYTE $00,$00,$00,$00,$00,$00,$00,$00
         .BYTE $00,$00,$00,$00,$00,$00,$00,$00
         .BYTE $00,$00,$00,$00,$00,$00,$00,$00
-baseLevelArray   
+currentColorIndexArray   
         .BYTE $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
         .BYTE $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
         .BYTE $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
@@ -400,7 +426,7 @@ ReinitializeSequences
         TXA 
 b42D9   STA pixelXPositionArray,X
         STA pixelYPositionArray,X
-        STA baseLevelArray,X
+        STA currentColorIndexArray,X
         STA initialFramesRemainingToNextPaintForStep,X
         STA framesRemainingToNextPaintForStep,X
         INX 
@@ -430,18 +456,18 @@ MainPaintLoop
         LDA initialFramesRemainingToNextPaintForStep,X
         STA framesRemainingToNextPaintForStep,X
 
-        LDA baseLevelArray,X
+        LDA currentColorIndexArray,X
         CMP #$FF
         BEQ GoBackToStartOfLoop
 
-        STA baseLevelForCurrentPixel
+        STA colorIndexForCurrentPixel
         LDA pixelXPositionArray,X
         STA pixelXPosition
         LDA pixelYPositionArray,X
         STA pixelYPosition
         JSR LoopThroughPixelsAndPaint
         LDX currentIndexToPixelBuffers
-        DEC baseLevelArray,X
+        DEC currentColorIndexArray,X
 GoBackToStartOfLoop   
         JMP MainPaintLoop
 
@@ -519,7 +545,7 @@ PlayerHasPressedDown
         JMP CheckIfCursorMovedLeftOrRight
 
 CheckIfCursorAtBottom   
-        CMP #$18
+        CMP #NUM_ROWS
         BNE CheckIfCursorMovedLeftOrRight
         ; Cursor has reached the bottom of the screen, so loop
         ; around to top
@@ -555,7 +581,7 @@ CursorMovedLeft
 
         ; Handle any wrap around from right to left.
 CheckIfCursorAtExtremeRight   
-        CMP #$28
+        CMP #NUM_COLS
         BNE CheckIfPlayerPressedFire
         LDA #$00
         STA cursorXPosition
@@ -577,14 +603,14 @@ PlayerHasntPressedFire
         BNE DrawCursorAndReturnFromInterrupt
 
         INC stepsSincePressedFire
-b43D7   SBC offsetSincePressedFire
-        LDA offsetSincePressedFire
+b43D7   INC seedValueForArrayIndices
+        LDA seedValueForArrayIndices
         AND maskForFireOffset
-        STA offsetSincePressedFire
+        STA seedValueForArrayIndices
 
-UpdateBaseLevelArray   
+UpdateColorIndexArray  
         TAX 
-        LDA baseLevelArray,X
+        LDA currentColorIndexArray,X
         CMP #$FF
         BNE DrawCursorAndReturnFromInterrupt
 
@@ -592,8 +618,8 @@ UpdateBaseLevelArray
         STA pixelXPositionArray,X
         LDA cursorYPosition
         STA pixelYPositionArray,X
-        LDA #$07
-        STA baseLevelArray,X
+        LDA #COLOR_MAX
+        STA currentColorIndexArray,X
 
         LDA smoothingDelay
         STA initialFramesRemainingToNextPaintForStep,X
@@ -601,10 +627,10 @@ UpdateBaseLevelArray
 
 DrawCursorAndReturnFromInterrupt   
         JSR LoadXAndYOfCursorPosition
-        LDA (currentLineInColorRamLoPtr),Y
-        AND #$07
+        LDA (currentLineForCursorInColorRamLoPtr),Y
+        AND #COLOR_MAX
         STA lastColorPainted
-        LDA #$01
+        LDA #WHITE
         STA currentColorToPaint
         JSR PaintCursorAtCurrentPosition
         JMP RETURN_FROM_INTERRUPT
@@ -615,9 +641,9 @@ DrawCursorAndReturnFromInterrupt
 LoadXAndYOfCursorPosition   
         LDX cursorYPosition
         LDA colorRAMLineTableLoPtrArray,X
-        STA currentLineInColorRamLoPtr
+        STA currentLineForCursorInColorRamLoPtr
         LDA colorRAMLineTableHiPtrArray,X
-        STA currentLineInColorRamHiPtr
+        STA currentLineForCursorInColorRamHiPtr
         LDY cursorXPosition
         RTS 
 
@@ -627,12 +653,12 @@ LoadXAndYOfCursorPosition
 PaintCursorAtCurrentPosition   
         JSR LoadXAndYOfCursorPosition
         LDA currentColorToPaint
-        STA (currentLineInColorRamLoPtr),Y
+        STA (currentLineForCursorInColorRamLoPtr),Y
         RTS 
 
 cursorXPosition        .BYTE $1E
 cursorYPosition        .BYTE $0D
-offsetSincePressedFire .BYTE $1A
+seedValueForArrayIndices .BYTE $1A
 maskForFireOffset      .BYTE $1F
 stepsSincePressedFire  .BYTE $00
 stepsExceeded255       .BYTE $00
@@ -679,7 +705,7 @@ bannerText
 InitializeScreenAndText   
         JSR InitializeScreen
 
-        LDX #$28
+        LDX #NUM_COLS
 b452D   LDA bannerText,X
         STA SCREEN_RAM + $03BF,X
         LDA #$0C

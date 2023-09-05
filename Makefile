@@ -9,7 +9,7 @@ original: clean d64_orig run_orig
 
 psychedelia.prg: src/psychedelia.asm
 	64tass -Wall --cbm-prg -Wno-implied-reg -o bin/psychedelia.prg -L bin/list-co1.txt -l bin/labels.txt src/psychedelia.asm
-	#echo "4b5e7f5c9cf281007a30762b9cba54be  bin/psychedelia.prg" | md5sum -c
+	echo "e36c7c60f7b8c268f761f7cc6a1521c2  bin/psychedelia.prg" | md5sum -c
 
 
 run: psychedelia.prg
